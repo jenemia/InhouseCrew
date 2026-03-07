@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -9,6 +10,13 @@ from typing import Sequence
 
 from .crew_factory import CrewFactory, CrewFactoryError
 from .llms import CodexExecutionError
+from .orders import (
+    OrderStatusRecord,
+    build_request_markdown,
+    build_user_request_preview,
+    load_order_run,
+    write_order_status,
+)
 from .persona_loader import CrewTaskSpec
 from .task_workspace import RunContext, TaskContext, TaskWorkspace, WorkspaceError
 
@@ -28,17 +36,30 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     run_parser = subparsers.add_parser("run", help="Run a configured crew.")
+    _add_runtime_options(run_parser)
     run_parser.add_argument("--crew-id", default="quickstart", help="Crew ID from configs/crews.")
-    run_parser.add_argument("--config-root", default="configs", help="Config directory path.")
-    run_parser.add_argument(
-        "--settings-path",
-        default="configs/settings.yaml",
-        help="Settings YAML path.",
-    )
-    run_parser.add_argument("--env-file", default=".env", help="Optional env file path.")
     input_group = run_parser.add_mutually_exclusive_group(required=True)
     input_group.add_argument("--input", help="Inline user request text.")
     input_group.add_argument("--input-file", help="Path to a text/Markdown input file.")
+
+    api_parser = subparsers.add_parser("api", help="Serve order intake and pickup HTTP APIs.")
+    _add_runtime_options(api_parser)
+    api_parser.add_argument("--host", default="127.0.0.1", help="Host for the HTTP server.")
+    api_parser.add_argument("--port", type=int, default=8000, help="Port for the HTTP server.")
+
+    worker_parser = subparsers.add_parser("worker", help="Process queued orders from workspace.")
+    _add_runtime_options(worker_parser)
+    worker_parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Process at most one queued order and then exit.",
+    )
+    worker_parser.add_argument(
+        "--poll-interval",
+        type=float,
+        default=2.0,
+        help="Polling interval in seconds when no queued order exists.",
+    )
 
     return parser
 
@@ -55,16 +76,36 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         print(summary_path)
         return 0
+    if args.command == "api":
+        run_api_from_args(args)
+        return 0
+    if args.command == "worker":
+        return run_worker_from_args(args)
 
     parser.error(f"Unsupported command: {args.command}")
     return 2
 
 
-def run_from_args(args: argparse.Namespace) -> Path:
-    project_root = Path.cwd()
+def _add_runtime_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--config-root", default="configs", help="Config directory path.")
+    parser.add_argument(
+        "--settings-path",
+        default="configs/settings.yaml",
+        help="Settings YAML path.",
+    )
+    parser.add_argument("--env-file", default=".env", help="Optional env file path.")
+
+
+def _resolve_runtime_paths(args: argparse.Namespace, project_root: Path) -> tuple[Path, Path, Path]:
     config_root = project_root / args.config_root
     settings_path = project_root / args.settings_path
     env_file = project_root / args.env_file
+    return config_root, settings_path, env_file
+
+
+def run_from_args(args: argparse.Namespace) -> Path:
+    project_root = Path.cwd()
+    config_root, settings_path, env_file = _resolve_runtime_paths(args, project_root)
     user_request = _read_user_request(args, project_root)
 
     # 설정 로딩과 Crew 조립 책임은 CLI가 아니라 팩토리에 집중시킨다.
@@ -82,11 +123,43 @@ def run_from_args(args: argparse.Namespace) -> Path:
     )
 
 
+def run_api_from_args(args: argparse.Namespace) -> None:
+    from .api import run_api_server
+
+    project_root = Path.cwd()
+    config_root, settings_path, env_file = _resolve_runtime_paths(args, project_root)
+    run_api_server(
+        project_root=project_root,
+        config_root=config_root,
+        settings_path=settings_path,
+        env_file=env_file if env_file.exists() else None,
+        host=args.host,
+        port=args.port,
+    )
+
+
+def run_worker_from_args(args: argparse.Namespace) -> int:
+    from .worker import run_worker_loop
+
+    project_root = Path.cwd()
+    config_root, settings_path, env_file = _resolve_runtime_paths(args, project_root)
+    return run_worker_loop(
+        project_root=project_root,
+        config_root=config_root,
+        settings_path=settings_path,
+        env_file=env_file if env_file.exists() else None,
+        once=args.once,
+        poll_interval=args.poll_interval,
+    )
+
+
 def run_crew(
     factory: CrewFactory,
     crew_id: str,
     user_request: str,
     project_root: Path,
+    run_id: str | None = None,
+    requested_at: str | None = None,
 ) -> Path:
     try:
         spec = factory.crews[crew_id]
@@ -95,34 +168,48 @@ def run_crew(
 
     workspace = TaskWorkspace((project_root / factory.settings.workspace_root).resolve())
     workspace.root.mkdir(parents=True, exist_ok=True)
-    # run 메타데이터를 먼저 만들고, task 산출물은 같은 run 아래에 묶어서 저장한다.
-    run = workspace.create_run(
+    run = _resolve_run_context(
+        workspace=workspace,
         crew_id=crew_id,
-        input_summary=user_request[:280],
-        metadata={"requested_at": datetime.now(UTC).isoformat()},
+        user_request=user_request,
+        run_id=run_id,
+        requested_at=requested_at,
+    )
+    _ensure_run_request_artifact(workspace=workspace, run=run, user_request=user_request)
+    requested_at_value = _resolve_requested_at(run=run, requested_at=requested_at)
+    started_at_value = datetime.now(UTC).isoformat()
+    _write_run_status(
+        workspace=workspace,
+        run=run,
+        status="running",
+        crew_id=crew_id,
+        user_request=user_request,
+        requested_at=requested_at_value,
+        started_at=started_at_value,
     )
 
-    task_contexts = {
-        task_spec.id: workspace.create_task(
-            run,
-            task_id=task_spec.id,
-            input_markdown=_build_task_input_markdown(
-                task_spec.id,
-                task_spec.description,
-                user_request,
-            ),
-            metadata={
-                "agent": task_spec.agent,
-                "expected_output": task_spec.expected_output,
-                "output_artifact": task_spec.output_artifact,
-            },
-        )
-        for task_spec in spec.tasks
-    }
-
     crew = None
+    task_contexts: dict[str, TaskContext] = {}
 
     try:
+        task_contexts = {
+            task_spec.id: workspace.create_task(
+                run,
+                task_id=task_spec.id,
+                input_markdown=_build_task_input_markdown(
+                    task_spec.id,
+                    task_spec.description,
+                    user_request,
+                ),
+                metadata={
+                    "agent": task_spec.agent,
+                    "expected_output": task_spec.expected_output,
+                    "output_artifact": task_spec.output_artifact,
+                },
+            )
+            for task_spec in spec.tasks
+        }
+
         # 실제 task 실행은 CrewAI에 맡기고, 결과 저장 정책만 프로젝트 레이어에서 관리한다.
         crew = factory.create_crew(crew_id)
         result = crew.kickoff(
@@ -146,11 +233,22 @@ def run_crew(
             user_request=user_request,
             result=result,
         )
-        return workspace.write_run_summary(
+        summary_path = workspace.write_run_summary(
             run,
             summary_markdown=summary_markdown,
             metadata={"status": "completed", "final_result_path": str(last_result_path)},
         )
+        _write_run_status(
+            workspace=workspace,
+            run=run,
+            status="completed",
+            crew_id=crew_id,
+            user_request=user_request,
+            requested_at=requested_at_value,
+            started_at=started_at_value,
+            finished_at=datetime.now(UTC).isoformat(),
+        )
+        return summary_path
     except Exception as error:
         failure_summary_path: Path | None = None
         persistence_error: WorkspaceError | None = None
@@ -168,6 +266,20 @@ def run_crew(
         except WorkspaceError as workspace_error:
             persistence_error = workspace_error
 
+        _write_run_status(
+            workspace=workspace,
+            run=run,
+            status="failed",
+            crew_id=crew_id,
+            user_request=user_request,
+            requested_at=requested_at_value,
+            started_at=started_at_value,
+            finished_at=datetime.now(UTC).isoformat(),
+            failure_file=str(run.run_dir / "failure.json"),
+            error_type=type(error).__name__,
+            error_message=str(error),
+        )
+
         raise CrewRunExecutionError(
             _build_cli_failure_message(
                 crew_id=crew_id,
@@ -179,6 +291,79 @@ def run_crew(
             run_dir=run.run_dir,
             summary_path=failure_summary_path,
         ) from error
+
+
+def _resolve_run_context(
+    workspace: TaskWorkspace,
+    crew_id: str,
+    user_request: str,
+    run_id: str | None,
+    requested_at: str | None,
+) -> RunContext:
+    if run_id is not None and (workspace.root / run_id).exists():
+        run = load_order_run(workspace, run_id)
+        if run.crew_id != crew_id:
+            raise CrewFactoryError(
+                f"Existing run '{run_id}' belongs to crew '{run.crew_id}', not '{crew_id}'"
+            )
+        return run
+
+    return workspace.create_run(
+        crew_id=crew_id,
+        input_summary=build_user_request_preview(user_request),
+        run_id=run_id,
+        metadata={"requested_at": requested_at or datetime.now(UTC).isoformat()},
+    )
+
+
+def _ensure_run_request_artifact(
+    workspace: TaskWorkspace,
+    run: RunContext,
+    user_request: str,
+) -> None:
+    request_path = run.run_dir / "request.md"
+    if request_path.exists():
+        return
+    workspace.write_run_artifact(run, "request.md", build_request_markdown(user_request))
+
+
+def _resolve_requested_at(run: RunContext, requested_at: str | None) -> str:
+    if requested_at is not None:
+        return requested_at
+    payload = json.loads(run.metadata_path.read_text(encoding="utf-8"))
+    value = payload.get("requested_at")
+    if value is None:
+        return datetime.now(UTC).isoformat()
+    return str(value)
+
+
+def _write_run_status(
+    workspace: TaskWorkspace,
+    run: RunContext,
+    status: str,
+    crew_id: str,
+    user_request: str,
+    requested_at: str,
+    started_at: str | None = None,
+    finished_at: str | None = None,
+    failure_file: str | None = None,
+    error_type: str | None = None,
+    error_message: str | None = None,
+) -> None:
+    record = OrderStatusRecord(
+        order_id=run.run_id,
+        crew_id=crew_id,
+        status=status,  # type: ignore[arg-type]
+        user_request_preview=build_user_request_preview(user_request),
+        requested_at=requested_at,
+        summary_file=str(run.summary_path),
+        started_at=started_at,
+        finished_at=finished_at,
+        failure_file=failure_file,
+        error_type=error_type,
+        error_message=error_message,
+    )
+    write_order_status(workspace, run, record)
 
 
 def _read_user_request(args: argparse.Namespace, project_root: Path) -> str:

@@ -6,9 +6,11 @@ readme = "README.md"
 requires-python = ">=3.10,<3.14"
 dependencies = [
     "crewai==1.10.1",
+    "fastapi>=0.115,<1.0",
     "pydantic>=2.11,<3.0",
     "pydantic-settings>=2.8,<3.0",
     "PyYAML>=6.0,<7.0",
+    "uvicorn>=0.30,<1.0",
 ]
 
 [project.scripts]
@@ -16,6 +18,7 @@ inhouse-crew = "inhouse_crew.main:main"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28,<1.0",
     "pytest>=8.3,<9.0",
     "ruff>=0.11,<0.12",
 ]
