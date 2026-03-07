@@ -1,0 +1,16 @@
+id: quickstart
+name: Quickstart Crew
+process: sequential
+agents:
+  - planner
+tasks:
+  - id: summarize_request
+    agent: planner
+    description: >
+      사용자 요청 `{user_request}`를 두세 문장으로 요약하고 바로 다음 작업 한 가지를 제안한다.
+    expected_output: >
+      요약과 다음 작업이 담긴 짧은 Markdown 문서.
+    output_artifact: summary.md
+output_policy:
+  save_markdown: true
+  include_metadata: true

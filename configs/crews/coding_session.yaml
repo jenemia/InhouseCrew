@@ -1,0 +1,16 @@
+id: coding_session
+name: Coding Session Crew
+process: sequential
+agents:
+  - developer
+tasks:
+  - id: implement_feature
+    agent: developer
+    description: >
+      입력 요구사항 `{user_request}`를 구현하고 검증 결과를 Markdown으로 정리한다.
+    expected_output: >
+      구현 결과와 검증 내역이 담긴 Markdown 보고서.
+    output_artifact: implementation.md
+output_policy:
+  save_markdown: true
+  include_metadata: true

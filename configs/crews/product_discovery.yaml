@@ -1,0 +1,25 @@
+id: product_discovery
+name: Product Discovery Crew
+process: sequential
+agents:
+  - planner
+  - reviewer
+tasks:
+  - id: analyze_request
+    agent: planner
+    description: >
+      제품 아이디어와 요구사항 `{user_request}`를 분석해 문제 정의와 작업 후보를 정리한다.
+      오늘 날짜는 `{current_date}`다.
+    expected_output: >
+      문제 정의, 가설, 다음 단계가 포함된 Markdown 분석 문서.
+    output_artifact: discovery.md
+  - id: validate_scope
+    agent: reviewer
+    description: >
+      제품 요구사항 `{user_request}`의 범위와 리스크를 검토하고 누락된 검증 포인트를 정리한다.
+    expected_output: >
+      범위 검증 결과와 추가 확인 항목이 포함된 Markdown 문서.
+    output_artifact: validation.md
+output_policy:
+  save_markdown: true
+  include_metadata: true

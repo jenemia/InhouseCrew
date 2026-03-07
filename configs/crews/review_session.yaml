@@ -1,0 +1,16 @@
+id: review_session
+name: Review Session Crew
+process: sequential
+agents:
+  - reviewer
+tasks:
+  - id: review_feature
+    agent: reviewer
+    description: >
+      입력 요구사항 `{user_request}`에 대한 구현 결과를 검토하고 버그, 리스크, 테스트 공백을 정리한다.
+    expected_output: >
+      코드 리뷰 결과와 잔여 리스크가 담긴 Markdown 문서.
+    output_artifact: review.md
+output_policy:
+  save_markdown: true
+  include_metadata: true

@@ -1,0 +1,36 @@
+[project]
+name = "inhouse-crew"
+version = "0.1.0"
+description = "In-house CrewAI orchestration that layers local Codex CLI access on top of CrewAI without modifying vendor code."
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "crewai==1.10.1",
+    "pydantic>=2.11,<3.0",
+    "pydantic-settings>=2.8,<3.0",
+    "PyYAML>=6.0,<7.0",
+]
+
+[project.scripts]
+inhouse-crew = "inhouse_crew.main:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3,<9.0",
+    "ruff>=0.11,<0.12",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

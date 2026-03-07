@@ -1,0 +1,33 @@
+id: feature_delivery
+name: Feature Delivery Crew
+process: sequential
+agents:
+  - planner
+  - developer
+  - reviewer
+tasks:
+  - id: plan_feature
+    agent: planner
+    description: >
+      입력 요구사항 `{user_request}`를 읽고 구현 계획, 리스크, 산출물을 정리한다.
+      오늘 날짜는 `{current_date}`다.
+    expected_output: >
+      구현 순서와 리스크가 담긴 Markdown 계획서.
+    output_artifact: plan.md
+  - id: implement_feature
+    agent: developer
+    description: >
+      입력 요구사항 `{user_request}`와 앞선 계획을 바탕으로 코드를 구현하고 검증 결과를 정리한다.
+    expected_output: >
+      구현 결과와 검증 내역이 담긴 Markdown 보고서.
+    output_artifact: implementation.md
+  - id: review_feature
+    agent: reviewer
+    description: >
+      입력 요구사항 `{user_request}`에 대한 구현 결과를 검토하고 발견 사항과 잔여 리스크를 보고한다.
+    expected_output: >
+      코드 리뷰 결과와 잔여 리스크가 담긴 Markdown 문서.
+    output_artifact: review.md
+output_policy:
+  save_markdown: true
+  include_metadata: true

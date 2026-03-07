@@ -1,0 +1,6 @@
+workspace_root: workspace/runs
+default_llm: codex-local-oauth
+codex_command: codex
+codex_model: null
+timeout_seconds: 120
+retry_count: 1
