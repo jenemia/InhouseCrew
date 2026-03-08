@@ -28,15 +28,16 @@ def test_run_crew_writes_summary_and_task_outputs(tmp_path: Path, monkeypatch) -
     run_dir = summary_path.parent
     status_payload = json.loads((run_dir / "status.json").read_text(encoding="utf-8"))
 
-    task_result = next((tmp_path / "workspace" / "runs").glob("*/summarize_request/result.md"))
+    task_result = next((tmp_path / "workspace" / "runs").glob("*/1.planner/result.md"))
     assert "Summarize the request." in task_result.read_text(encoding="utf-8")
     assert status_payload["status"] == "completed"
     assert status_payload["task_statuses"]["summarize_request"]["status"] == "done"
+    assert status_payload["task_statuses"]["summarize_request"]["task_dir_name"] == "1.planner"
     assert status_payload["task_statuses"]["summarize_request"]["prompt_chars"] > 0
     assert status_payload["task_statuses"]["summarize_request"]["llm_elapsed_seconds"] == 1.0
     assert status_payload["task_statuses"]["summarize_request"]["knowledge_reset_applied"] is False
-    assert (run_dir / "summarize_request" / "status.json").exists()
-    assert (run_dir / "summarize_request" / "summary.md").exists()
+    assert (run_dir / "1.planner" / "status.json").exists()
+    assert (run_dir / "1.planner" / "summary.md").exists()
 
 
 def test_run_crew_persists_failure_artifacts(tmp_path: Path, monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -57,26 +58,27 @@ def test_run_crew_persists_failure_artifacts(tmp_path: Path, monkeypatch) -> Non
     run_dir = next((tmp_path / "workspace" / "runs").glob("*"))
     run_metadata = json.loads((run_dir / "run-metadata.json").read_text(encoding="utf-8"))
     task_metadata = json.loads(
-        (run_dir / "summarize_request" / "metadata.json").read_text(encoding="utf-8")
+        (run_dir / "1.planner" / "metadata.json").read_text(encoding="utf-8")
     )
 
     assert run_metadata["status"] == "failed"
     assert run_metadata["failed_task_id"] == "summarize_request"
+    assert task_metadata["task_dir_name"] == "1.planner"
     assert task_metadata["status"] == "failed"
-    task_status = json.loads(
-        (run_dir / "summarize_request" / "status.json").read_text(encoding="utf-8")
-    )
+    task_status = json.loads((run_dir / "1.planner" / "status.json").read_text(encoding="utf-8"))
     run_status = json.loads((run_dir / "status.json").read_text(encoding="utf-8"))
     assert task_status["status"] == "failed"
+    assert task_status["task_dir_name"] == "1.planner"
     assert task_status["prompt_chars"] > 0
     assert task_status["llm_elapsed_seconds"] == 2.0
     assert run_status["task_statuses"]["summarize_request"]["status"] == "failed"
+    assert run_status["task_statuses"]["summarize_request"]["task_dir_name"] == "1.planner"
     assert (run_dir / "failure.json").exists()
-    assert (run_dir / "summarize_request" / "failure.json").exists()
+    assert (run_dir / "1.planner" / "failure.json").exists()
     assert "Codex command not found" in (run_dir / "summary.md").read_text(encoding="utf-8")
-    assert "Codex command not found" in (
-        run_dir / "summarize_request" / "result.md"
-    ).read_text(encoding="utf-8")
+    assert "Codex command not found" in (run_dir / "1.planner" / "result.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def test_main_returns_nonzero_with_concise_failure_message(

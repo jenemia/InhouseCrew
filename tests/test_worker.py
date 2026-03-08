@@ -39,8 +39,9 @@ def test_run_worker_once_processes_queued_order(
     status_payload = json.loads((run.run_dir / "status.json").read_text(encoding="utf-8"))
     assert status_payload["status"] == "completed"
     assert status_payload["task_statuses"]["summarize_request"]["status"] == "done"
+    assert status_payload["task_statuses"]["summarize_request"]["task_dir_name"] == "1.planner"
     assert (run.run_dir / "summary.md").exists()
-    assert (run.run_dir / "summarize_request" / "status.json").exists()
+    assert (run.run_dir / "1.planner" / "status.json").exists()
     assert f"picked order_id={run.run_id}" in captured.out
     assert f"[task] run_id={run.run_id} task=summarize_request" in captured.out
     assert f"completed order_id={run.run_id}" in captured.out
@@ -76,6 +77,7 @@ def test_run_worker_once_marks_failed_order_when_crew_fails(
     status_payload = json.loads((run.run_dir / "status.json").read_text(encoding="utf-8"))
     assert status_payload["status"] == "failed"
     assert status_payload["task_statuses"]["summarize_request"]["status"] == "failed"
+    assert status_payload["task_statuses"]["summarize_request"]["task_dir_name"] == "1.planner"
     assert (run.run_dir / "failure.json").exists()
     assert f"picked order_id={run.run_id}" in captured.out
     assert "status=failed" in captured.out

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Literal
 
 from .persona_loader import CrewTaskSpec
-from .task_workspace import RunContext, TaskWorkspace, WorkspaceError
+from .task_workspace import RunContext, TaskWorkspace, WorkspaceError, build_task_dir_name
 
 OrderStatusValue = Literal["queued", "running", "completed", "failed"]
 TaskStatusValue = Literal["pending", "running", "done", "failed"]
@@ -23,6 +23,7 @@ class TaskStatusRecord:
     task_id: str
     agent: str
     status: TaskStatusValue
+    task_dir_name: str | None = None
     started_at: str | None = None
     finished_at: str | None = None
     result_file: str | None = None
@@ -38,6 +39,7 @@ class TaskStatusRecord:
     def to_dict(self) -> dict[str, object]:
         return {
             "task_id": self.task_id,
+            "task_dir_name": self.task_dir_name,
             "agent": self.agent,
             "status": self.status,
             "started_at": self.started_at,
@@ -57,6 +59,7 @@ class TaskStatusRecord:
     def from_dict(cls, payload: dict[str, object]) -> "TaskStatusRecord":
         return cls(
             task_id=str(payload["task_id"]),
+            task_dir_name=_get_optional_str(payload, "task_dir_name"),
             agent=str(payload["agent"]),
             status=str(payload["status"]),  # type: ignore[arg-type]
             started_at=_get_optional_str(payload, "started_at"),
@@ -176,12 +179,13 @@ def build_pending_task_statuses(spec_tasks: Sequence[CrewTaskSpec]) -> dict[str,
     return {
         task.id: TaskStatusRecord(
             task_id=task.id,
+            task_dir_name=build_task_dir_name(index, task.agent),
             agent=task.agent,
             status="pending",
             output_artifact=task.output_artifact,
             context_task_ids=list(task.context_tasks),
         )
-        for task in spec_tasks
+        for index, task in enumerate(spec_tasks, start=1)
     }
 
 

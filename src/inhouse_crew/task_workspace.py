@@ -11,6 +11,10 @@ class WorkspaceError(RuntimeError):
     """Raised when workspace artifacts cannot be written."""
 
 
+def build_task_dir_name(step_index: int, agent_id: str) -> str:
+    return f"{step_index}.{agent_id}"
+
+
 @dataclass(slots=True)
 class RunContext:
     run_id: str
@@ -24,6 +28,7 @@ class RunContext:
 @dataclass(slots=True)
 class TaskContext:
     task_id: str
+    task_dir_name: str
     task_dir: Path
     input_path: Path
     result_path: Path
@@ -78,21 +83,25 @@ class TaskWorkspace:
         run: RunContext,
         task_id: str,
         input_markdown: str,
+        task_dir_name: str | None = None,
         metadata: dict[str, object] | None = None,
         status_payload: dict[str, object] | None = None,
     ) -> TaskContext:
-        task_dir = run.run_dir / task_id
+        resolved_task_dir_name = task_dir_name or task_id
+        task_dir = run.run_dir / resolved_task_dir_name
         input_path = task_dir / "input.md"
         result_path = task_dir / "result.md"
         metadata_path = task_dir / "metadata.json"
         status_path = task_dir / "status.json"
         metadata_payload = {
             "task_id": task_id,
+            "task_dir_name": resolved_task_dir_name,
             "run_id": run.run_id,
             **(metadata or {}),
         }
         resolved_status_payload = status_payload or {
             "task_id": task_id,
+            "task_dir_name": resolved_task_dir_name,
             "agent": str(metadata_payload.get("agent") or ""),
             "status": "pending",
             "started_at": None,
@@ -119,6 +128,7 @@ class TaskWorkspace:
 
         return TaskContext(
             task_id=task_id,
+            task_dir_name=resolved_task_dir_name,
             task_dir=task_dir,
             input_path=input_path,
             result_path=result_path,
@@ -233,3 +243,12 @@ class TaskWorkspace:
             json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
+
+
+__all__ = [
+    "RunContext",
+    "TaskContext",
+    "TaskWorkspace",
+    "WorkspaceError",
+    "build_task_dir_name",
+]

@@ -30,6 +30,9 @@ def test_create_order_creates_queued_status_and_request_file(tmp_path: Path) -> 
     assert status_payload["order_id"] == run.run_id
     assert status_payload["status"] == "queued"
     assert status_payload["task_statuses"]["summarize_request"]["status"] == "pending"
+    assert (
+        status_payload["task_statuses"]["summarize_request"]["task_dir_name"] == "1.planner"
+    )
     assert status_payload["task_statuses"]["summarize_request"]["context_task_ids"] == []
 
 

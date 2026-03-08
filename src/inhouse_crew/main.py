@@ -24,7 +24,13 @@ from .orders import (
 )
 from .persona_loader import CrewTaskSpec
 from .task_status_listener import CrewTaskStatusListener
-from .task_workspace import RunContext, TaskContext, TaskWorkspace, WorkspaceError
+from .task_workspace import (
+    RunContext,
+    TaskContext,
+    TaskWorkspace,
+    WorkspaceError,
+    build_task_dir_name,
+)
 
 
 class CrewRunExecutionError(RuntimeError):
@@ -197,11 +203,13 @@ def run_crew(
     task_statuses: dict[str, TaskStatusRecord] = {}
 
     try:
-        for task_spec in spec.tasks:
+        for step_index, task_spec in enumerate(spec.tasks, start=1):
+            task_dir_name = build_task_dir_name(step_index, task_spec.agent)
             task_status = _build_task_status_record(
                 task_spec,
                 task_context=None,
                 status="pending",
+                task_dir_name=task_dir_name,
                 context_task_ids=list(task_spec.context_tasks),
             )
             task_context = workspace.create_task(
@@ -212,6 +220,7 @@ def run_crew(
                     task_spec.description,
                     user_request,
                 ),
+                task_dir_name=task_dir_name,
                 metadata={
                     "agent": task_spec.agent,
                     "expected_output": task_spec.expected_output,
@@ -480,6 +489,7 @@ def _build_task_status_record(
     task_context: TaskContext | None,
     *,
     status: str,
+    task_dir_name: str | None = None,
     started_at: str | None = None,
     finished_at: str | None = None,
     failure_file: str | None = None,
@@ -499,6 +509,7 @@ def _build_task_status_record(
         task_id=task_spec.id,
         agent=task_spec.agent,
         status=status,  # type: ignore[arg-type]
+        task_dir_name=task_context.task_dir_name if task_context is not None else task_dir_name,
         started_at=started_at,
         finished_at=finished_at,
         result_file=str(task_context.result_path) if task_context is not None else None,

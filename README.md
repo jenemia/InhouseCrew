@@ -6,9 +6,24 @@ CrewAI를 원본 수정 없이 상위 레이어에서 확장해, 로컬 Codex CL
 
 - Python `>=3.10,<3.14`
 - `uv`
+- `CrewAI`
 - `codex-cli` (https://developers.openai.com/codex/cli/)
 
 이 저장소는 `uv`가 관리하는 Python 3.12 환경을 기본 기준으로 사용한다.
+이 프로젝트는 CrewAI 위에 얹는 상위 실행 레이어이므로, **CrewAI 없이는 동작하지 않는다.**
+
+공식 링크:
+
+- GitHub: https://github.com/crewAIInc/crewAI
+- Docs: https://docs.crewai.com/en/installation
+
+CrewAI 공식 설치 예시:
+
+```bash
+uv tool install crewai
+```
+
+이 저장소에서 개발할 때는 아래 명령으로 프로젝트가 의존하는 CrewAI 패키지까지 함께 설치된다.
 
 ## Setup
 
@@ -34,6 +49,7 @@ uv run inhouse-crew run \
 ```
 
 실행이 끝나면 `workspace/runs/<run-id>/summary.md` 경로가 출력되고, 각 task별 `input.md`, `result.md`, `metadata.json`도 같은 run 폴더 아래에 저장된다.
+task 폴더명은 `1.<agent_id>`, `2.<agent_id>` 형식을 쓰고, API/status의 `task_statuses` key는 계속 `task_id`를 유지한다.
 
 ## Order Pickup API
 
@@ -101,6 +117,7 @@ curl http://127.0.0.1:8000/orders/<order_id>/status
 `status.json` 기준으로 `queued`, `running`, `completed`, `failed` 상태를 확인할 수 있다.
 추가로 `task_statuses` 와 각 task 폴더의 `status.json` 에서
 `pending`, `running`, `done`, `failed` 를 볼 수 있다.
+이때 `task_dir_name` 필드로 `task_id -> 실제 폴더명` 매핑을 함께 확인할 수 있다.
 또한 각 task status에는 `context_task_ids`, `prompt_chars`, `llm_started_at`,
 `llm_finished_at`, `llm_elapsed_seconds`, `knowledge_reset_applied` 가 기록된다.
 

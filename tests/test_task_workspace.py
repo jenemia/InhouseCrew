@@ -20,6 +20,7 @@ def test_task_workspace_creates_run_and_task_artifacts(tmp_path: Path) -> None:
         run,
         task_id="plan_feature",
         input_markdown="# Input\n",
+        task_dir_name="1.planner",
         metadata={"agent": "planner"},
     )
     result_path = workspace.write_task_result(
@@ -46,8 +47,10 @@ def test_task_workspace_creates_run_and_task_artifacts(tmp_path: Path) -> None:
     )
 
     assert run.run_dir == tmp_path / "runs" / "run-001"
+    assert task.task_dir == run.run_dir / "1.planner"
     assert task.input_path.read_text(encoding="utf-8") == "# Input\n"
     task_status = json.loads(task.status_path.read_text(encoding="utf-8"))
+    assert task_status["task_dir_name"] == "1.planner"
     assert task_status["status"] == "pending"
     assert task_status["context_task_ids"] == []
     assert task_status["knowledge_reset_applied"] is None
@@ -60,9 +63,24 @@ def test_task_workspace_creates_run_and_task_artifacts(tmp_path: Path) -> None:
 
     metadata = json.loads(task.metadata_path.read_text(encoding="utf-8"))
     assert metadata["agent"] == "planner"
+    assert metadata["task_dir_name"] == "1.planner"
     assert metadata["status"] == "completed"
     run_metadata = json.loads(run.metadata_path.read_text(encoding="utf-8"))
     assert run_metadata["run_status"] == "completed"
+
+
+def test_task_workspace_defaults_task_dir_name_to_task_id(tmp_path: Path) -> None:
+    workspace = TaskWorkspace(tmp_path / "runs")
+    run = workspace.create_run("feature_delivery", "summary", run_id="run-003")
+
+    task = workspace.create_task(run, "review_feature", "# Input\n")
+
+    assert task.task_dir_name == "review_feature"
+    assert task.task_dir == run.run_dir / "review_feature"
+    metadata = json.loads(task.metadata_path.read_text(encoding="utf-8"))
+    status = json.loads(task.status_path.read_text(encoding="utf-8"))
+    assert metadata["task_dir_name"] == "review_feature"
+    assert status["task_dir_name"] == "review_feature"
 
 
 def test_task_workspace_surfaces_write_failures(

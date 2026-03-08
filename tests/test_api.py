@@ -39,6 +39,7 @@ def test_post_orders_creates_order_workspace_and_status(tmp_path: Path) -> None:
     status_payload = status_response.json()
     assert status_response.status_code == 200
     assert status_payload["task_statuses"]["summarize_request"]["status"] == "pending"
+    assert status_payload["task_statuses"]["summarize_request"]["task_dir_name"] == "1.planner"
 
 
 def test_pickup_returns_markdown_when_order_is_completed(tmp_path: Path) -> None:
