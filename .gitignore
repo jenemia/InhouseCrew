@@ -12,3 +12,4 @@ htmlcov/
 dist/
 build/
 workspace/runs/
+workspace/crewai_storage
