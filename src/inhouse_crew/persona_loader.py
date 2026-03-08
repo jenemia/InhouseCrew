@@ -67,9 +67,17 @@ def load_agent_persona(path: Path) -> AgentPersona:
 
 def load_agent_personas(directory: Path) -> dict[str, AgentPersona]:
     personas: dict[str, AgentPersona] = {}
-    for path in sorted(directory.glob("*.yaml")):
+    persona_paths: dict[str, Path] = {}
+    for path in sorted(p for p in directory.rglob("*.yaml") if p.is_file()):
         persona = load_agent_persona(path)
+        existing_path = persona_paths.get(persona.id)
+        if existing_path is not None:
+            raise ValueError(
+                "Duplicate persona id "
+                f"'{persona.id}' found in {existing_path} and {path}"
+            )
         personas[persona.id] = persona
+        persona_paths[persona.id] = path
     return personas
 
 

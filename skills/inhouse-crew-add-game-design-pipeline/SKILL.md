@@ -24,6 +24,7 @@ When the user asks for a multi-agent game design workflow, define the crew in YA
 10. Keep `README.md` to exactly one persona example block. Update sample crew mentions without adding more persona examples.
 11. Update `AGENTS.md` so future sessions know when to use this skill.
 12. Validate the new skill and run the relevant pytest targets after config changes.
+13. Store crew-specific personas under `configs/agents/<crew_id>/` and leave shared personas at the `configs/agents/` root.
 
 ## Editing Rules
 
@@ -33,6 +34,7 @@ When the user asks for a multi-agent game design workflow, define the crew in YA
 - Make the final synthesis task explicit when the crew needs a single final design conclusion.
 - If stable project context is required, prefer crew-level knowledge files over repeating long default prompts.
 - If the user provides an agent id with a typo, normalize to the closest existing repository id and record that choice in the implementation doc.
+- Avoid duplicate persona ids across the `configs/agents/` tree. Treat them as a registry error rather than relying on overwrite order.
 
 ## Reference
 

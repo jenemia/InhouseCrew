@@ -150,7 +150,9 @@ curl http://127.0.0.1:8000/pickup/<order_id>
 
 ## Config Layout
 
-- `configs/agents/*.yaml`: agent persona 정의
+- `configs/agents/**/*.yaml`: agent persona 정의
+  - shared persona는 `configs/agents/` 루트에 둔다.
+  - crew 전용 persona는 `configs/agents/<crew_id>/` 아래에 둔다.
 - `configs/crews/*.yaml`: crew/task 흐름 정의
 - `configs/settings.yaml`: Codex/workspace 기본 설정
 - `knowledge/<crew_id>/*.md`: crew-level Knowledge 문서
@@ -170,6 +172,7 @@ curl http://127.0.0.1:8000/pickup/<order_id>
 ## Agent Persona Example
 
 README에는 persona 파일 예제를 1개만 유지한다. 다른 persona는 `configs/agents/` 경로의 실제 YAML을 기준으로 확인한다.
+현재 예제 파일 위치는 `configs/agents/game_design_team/game_concept_generator.yaml` 이다.
 
 ```yaml
 id: game_concept_generator

@@ -5,7 +5,12 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from inhouse_crew.persona_loader import load_agent_persona, load_crew_spec, load_registry
+from inhouse_crew.persona_loader import (
+    load_agent_persona,
+    load_agent_personas,
+    load_crew_spec,
+    load_registry,
+)
 
 
 def test_load_registry_reads_sample_configs() -> None:
@@ -40,6 +45,56 @@ def test_load_registry_reads_sample_configs() -> None:
         "generate_game_concept",
         "define_player_fantasy",
     ]
+    assert Path("configs/agents/game_design_team/game_concept_generator.yaml").is_file()
+
+
+def test_load_agent_personas_reads_nested_directories(tmp_path: Path) -> None:
+    agents_dir = tmp_path / "agents"
+    nested_dir = agents_dir / "game_design_team"
+    nested_dir.mkdir(parents=True)
+
+    (agents_dir / "planner.yaml").write_text(
+        "id: planner\n"
+        "role: Planner\n"
+        "goal: plan\n"
+        "backstory: test\n",
+        encoding="utf-8",
+    )
+    (nested_dir / "game_concept_generator.yaml").write_text(
+        "id: game_concept_generator\n"
+        "role: Generator\n"
+        "goal: generate\n"
+        "backstory: test\n",
+        encoding="utf-8",
+    )
+
+    personas = load_agent_personas(agents_dir)
+
+    assert set(personas) == {"planner", "game_concept_generator"}
+
+
+def test_load_agent_personas_rejects_duplicate_ids_across_directories(tmp_path: Path) -> None:
+    agents_dir = tmp_path / "agents"
+    nested_dir = agents_dir / "game_design_team"
+    nested_dir.mkdir(parents=True)
+
+    (agents_dir / "shared.yaml").write_text(
+        "id: duplicate_agent\n"
+        "role: Shared\n"
+        "goal: one\n"
+        "backstory: root\n",
+        encoding="utf-8",
+    )
+    (nested_dir / "duplicate.yaml").write_text(
+        "id: duplicate_agent\n"
+        "role: Nested\n"
+        "goal: two\n"
+        "backstory: nested\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate persona id 'duplicate_agent' found in"):
+        load_agent_personas(agents_dir)
 
 
 def test_load_agent_persona_rejects_missing_id(tmp_path: Path) -> None:
