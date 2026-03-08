@@ -3,16 +3,74 @@ from __future__ import annotations
 import json
 import os
 import re
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+from .persona_loader import CrewTaskSpec
 from .task_workspace import RunContext, TaskWorkspace, WorkspaceError
 
 OrderStatusValue = Literal["queued", "running", "completed", "failed"]
+TaskStatusValue = Literal["pending", "running", "done", "failed"]
 
 _ORDER_ID_PATTERN = re.compile(r"^T(?P<date>\d{8})-(?P<sequence>\d{6})(?:_.+)?$")
+
+
+@dataclass(slots=True, frozen=True)
+class TaskStatusRecord:
+    task_id: str
+    agent: str
+    status: TaskStatusValue
+    started_at: str | None = None
+    finished_at: str | None = None
+    result_file: str | None = None
+    output_artifact: str | None = None
+    failure_file: str | None = None
+    context_task_ids: list[str] = field(default_factory=list)
+    prompt_chars: int | None = None
+    llm_started_at: str | None = None
+    llm_finished_at: str | None = None
+    llm_elapsed_seconds: float | None = None
+    knowledge_reset_applied: bool | None = None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "task_id": self.task_id,
+            "agent": self.agent,
+            "status": self.status,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
+            "result_file": self.result_file,
+            "output_artifact": self.output_artifact,
+            "failure_file": self.failure_file,
+            "context_task_ids": self.context_task_ids,
+            "prompt_chars": self.prompt_chars,
+            "llm_started_at": self.llm_started_at,
+            "llm_finished_at": self.llm_finished_at,
+            "llm_elapsed_seconds": self.llm_elapsed_seconds,
+            "knowledge_reset_applied": self.knowledge_reset_applied,
+        }
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> "TaskStatusRecord":
+        return cls(
+            task_id=str(payload["task_id"]),
+            agent=str(payload["agent"]),
+            status=str(payload["status"]),  # type: ignore[arg-type]
+            started_at=_get_optional_str(payload, "started_at"),
+            finished_at=_get_optional_str(payload, "finished_at"),
+            result_file=_get_optional_str(payload, "result_file"),
+            output_artifact=_get_optional_str(payload, "output_artifact"),
+            failure_file=_get_optional_str(payload, "failure_file"),
+            context_task_ids=_get_optional_str_list(payload, "context_task_ids"),
+            prompt_chars=_get_optional_int(payload, "prompt_chars"),
+            llm_started_at=_get_optional_str(payload, "llm_started_at"),
+            llm_finished_at=_get_optional_str(payload, "llm_finished_at"),
+            llm_elapsed_seconds=_get_optional_float(payload, "llm_elapsed_seconds"),
+            knowledge_reset_applied=_get_optional_bool(payload, "knowledge_reset_applied"),
+        )
 
 
 @dataclass(slots=True, frozen=True)
@@ -28,6 +86,7 @@ class OrderStatusRecord:
     failure_file: str | None = None
     error_type: str | None = None
     error_message: str | None = None
+    task_statuses: dict[str, TaskStatusRecord] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -42,11 +101,22 @@ class OrderStatusRecord:
             "failure_file": self.failure_file,
             "error_type": self.error_type,
             "error_message": self.error_message,
+            "task_statuses": {
+                task_id: task_status.to_dict()
+                for task_id, task_status in self.task_statuses.items()
+            },
         }
         return payload
 
     @classmethod
     def from_dict(cls, payload: dict[str, object]) -> "OrderStatusRecord":
+        raw_task_statuses = payload.get("task_statuses")
+        task_statuses: dict[str, TaskStatusRecord] = {}
+        if isinstance(raw_task_statuses, dict):
+            for task_id, value in raw_task_statuses.items():
+                if isinstance(value, dict):
+                    task_statuses[str(task_id)] = TaskStatusRecord.from_dict(value)
+
         return cls(
             order_id=str(payload["order_id"]),
             crew_id=str(payload["crew_id"]),
@@ -59,6 +129,7 @@ class OrderStatusRecord:
             failure_file=_get_optional_str(payload, "failure_file"),
             error_type=_get_optional_str(payload, "error_type"),
             error_message=_get_optional_str(payload, "error_message"),
+            task_statuses=task_statuses,
         )
 
 
@@ -66,6 +137,7 @@ def create_order(
     workspace: TaskWorkspace,
     crew_id: str,
     user_request: str,
+    task_statuses: dict[str, TaskStatusRecord] | None = None,
     requested_at: str | None = None,
 ) -> tuple[RunContext, OrderStatusRecord]:
     requested_at_value = requested_at or datetime.now(UTC).isoformat()
@@ -94,9 +166,23 @@ def create_order(
         user_request_preview=build_user_request_preview(user_request),
         requested_at=requested_at_value,
         summary_file=str(run.summary_path),
+        task_statuses=task_statuses or {},
     )
     write_order_status(workspace, run, status)
     return run, status
+
+
+def build_pending_task_statuses(spec_tasks: Sequence[CrewTaskSpec]) -> dict[str, TaskStatusRecord]:
+    return {
+        task.id: TaskStatusRecord(
+            task_id=task.id,
+            agent=task.agent,
+            status="pending",
+            output_artifact=task.output_artifact,
+            context_task_ids=list(task.context_tasks),
+        )
+        for task in spec_tasks
+    }
 
 
 def build_order_id(requested_at: datetime, sequence: int, slug: str) -> str:
@@ -216,10 +302,37 @@ def _get_optional_str(payload: dict[str, object], key: str) -> str | None:
     return None if value in (None, "") else str(value)
 
 
+def _get_optional_str_list(payload: dict[str, object], key: str) -> list[str]:
+    value = payload.get(key)
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str)]
+
+
+def _get_optional_int(payload: dict[str, object], key: str) -> int | None:
+    value = payload.get(key)
+    return value if isinstance(value, int) else None
+
+
+def _get_optional_float(payload: dict[str, object], key: str) -> float | None:
+    value = payload.get(key)
+    if isinstance(value, int | float):
+        return float(value)
+    return None
+
+
+def _get_optional_bool(payload: dict[str, object], key: str) -> bool | None:
+    value = payload.get(key)
+    return value if isinstance(value, bool) else None
+
+
 __all__ = [
     "OrderStatusRecord",
     "OrderStatusValue",
+    "TaskStatusRecord",
+    "TaskStatusValue",
     "build_order_id",
+    "build_pending_task_statuses",
     "build_request_markdown",
     "build_request_slug",
     "build_user_request_preview",

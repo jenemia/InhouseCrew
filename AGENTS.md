@@ -8,4 +8,6 @@
 - 사용자가 agent persona 추가/수정/리뷰를 요청하면 먼저 `skills/inhouse-crew-add-agent-persona/SKILL.md` 를 읽고 그 절차를 따른다.
 - 사용자가 `game design team crew`, `game design pipeline`, `concept/fantasy/innovation/market validator 묶음 crew` 추가 또는 수정을 요청하면 먼저 `skills/inhouse-crew-add-game-design-pipeline/SKILL.md` 를 읽고 그 절차를 따른다.
 - persona 작업에서는 `configs/crews/*.yaml` 를 기본적으로 수정하지 않는다. crew 변경은 사용자가 명시적으로 요청한 경우에만 수행한다.
+- crew 설계 시 고정 프로젝트 배경은 `knowledge/<crew_id>/project_brief.md` 같은 knowledge 파일로 분리하고, 실행 간 누적 맥락이 필요할 때만 `memory: true` 를 사용한다.
 - 구현성 변경 요청이면 production 파일을 수정하기 전에 관련 `docs/*-implementation.md` 문서를 먼저 만들거나 갱신한다.
+- 라이브러리나 프레임워크 기능을 설계하거나 변경할 때는 가능하면 공식 문서를 먼저 확인하고, 그 가이드를 계획과 구현에 반영한다.

@@ -3,21 +3,27 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Sequence
+
+from crewai.events.event_bus import crewai_event_bus
 
 from .crew_factory import CrewFactory, CrewFactoryError
 from .llms import CodexExecutionError
 from .orders import (
     OrderStatusRecord,
+    TaskStatusRecord,
     build_request_markdown,
     build_user_request_preview,
     load_order_run,
+    read_order_status,
     write_order_status,
 )
 from .persona_loader import CrewTaskSpec
+from .task_status_listener import CrewTaskStatusListener
 from .task_workspace import RunContext, TaskContext, TaskWorkspace, WorkspaceError
 
 
@@ -120,6 +126,7 @@ def run_from_args(args: argparse.Namespace) -> Path:
         crew_id=args.crew_id,
         user_request=user_request,
         project_root=project_root,
+        progress_callback=_print_runtime_log,
     )
 
 
@@ -136,6 +143,10 @@ def run_api_from_args(args: argparse.Namespace) -> None:
         host=args.host,
         port=args.port,
     )
+
+
+def _print_runtime_log(message: str) -> None:
+    print(message, flush=True)
 
 
 def run_worker_from_args(args: argparse.Namespace) -> int:
@@ -160,6 +171,7 @@ def run_crew(
     project_root: Path,
     run_id: str | None = None,
     requested_at: str | None = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> Path:
     try:
         spec = factory.crews[crew_id]
@@ -178,22 +190,21 @@ def run_crew(
     _ensure_run_request_artifact(workspace=workspace, run=run, user_request=user_request)
     requested_at_value = _resolve_requested_at(run=run, requested_at=requested_at)
     started_at_value = datetime.now(UTC).isoformat()
-    _write_run_status(
-        workspace=workspace,
-        run=run,
-        status="running",
-        crew_id=crew_id,
-        user_request=user_request,
-        requested_at=requested_at_value,
-        started_at=started_at_value,
-    )
+    _emit_progress_log(progress_callback, f"[run] start crew={crew_id} run_id={run.run_id}")
 
     crew = None
     task_contexts: dict[str, TaskContext] = {}
+    task_statuses: dict[str, TaskStatusRecord] = {}
 
     try:
-        task_contexts = {
-            task_spec.id: workspace.create_task(
+        for task_spec in spec.tasks:
+            task_status = _build_task_status_record(
+                task_spec,
+                task_context=None,
+                status="pending",
+                context_task_ids=list(task_spec.context_tasks),
+            )
+            task_context = workspace.create_task(
                 run,
                 task_id=task_spec.id,
                 input_markdown=_build_task_input_markdown(
@@ -206,27 +217,74 @@ def run_crew(
                     "expected_output": task_spec.expected_output,
                     "output_artifact": task_spec.output_artifact,
                 },
+                status_payload=task_status.to_dict(),
             )
-            for task_spec in spec.tasks
+            task_contexts[task_spec.id] = task_context
+            task_status = replace(
+                task_status,
+                result_file=str(task_context.result_path),
+                output_artifact=(
+                    str(task_context.task_dir / task_spec.output_artifact)
+                    if task_spec.output_artifact
+                    else None
+                ),
+            )
+            task_statuses[task_spec.id] = task_status
+            workspace.write_task_status(task_context, task_status.to_dict())
+
+        output_file_map = {
+            task_id: task_context.result_path.relative_to(project_root).as_posix()
+            for task_id, task_context in task_contexts.items()
         }
 
         # 실제 task 실행은 CrewAI에 맡기고, 결과 저장 정책만 프로젝트 레이어에서 관리한다.
-        crew = factory.create_crew(crew_id)
-        result = crew.kickoff(
-            inputs={
-                "user_request": user_request,
-                "current_date": datetime.now(UTC).date().isoformat(),
-            }
-        )
-
-        last_result_path = run.summary_path
-        for crew_task, task_spec in zip(crew.tasks, spec.tasks, strict=True):
-            task_context = task_contexts[task_spec.id]
-            last_result_path = workspace.write_task_result(
-                task_context,
-                result_markdown=_task_output_to_markdown(task_spec.id, crew_task.output),
-                metadata={"status": "completed"},
+        with crewai_event_bus.scoped_handlers():
+            CrewTaskStatusListener(
+                workspace=workspace,
+                run=run,
+                task_contexts=task_contexts,
+                initial_task_statuses=task_statuses,
+                log_fn=progress_callback,
             )
+            crew = factory.create_crew(crew_id, output_file_map=output_file_map)
+            knowledge_reset_applied = bool(
+                getattr(crew, "_inhouse_knowledge_reset_applied", False)
+            )
+            for task_id, task_status in task_statuses.items():
+                updated_task_status = replace(
+                    task_status,
+                    knowledge_reset_applied=knowledge_reset_applied,
+                )
+                task_statuses[task_id] = updated_task_status
+                workspace.write_task_status(task_contexts[task_id], updated_task_status.to_dict())
+
+            _write_run_status(
+                workspace=workspace,
+                run=run,
+                status="running",
+                crew_id=crew_id,
+                user_request=user_request,
+                requested_at=requested_at_value,
+                started_at=started_at_value,
+                task_statuses=task_statuses,
+            )
+            try:
+                result = crew.kickoff(
+                    inputs={
+                        "user_request": user_request,
+                        "current_date": datetime.now(UTC).date().isoformat(),
+                    }
+                )
+            finally:
+                crewai_event_bus.flush()
+
+        last_result_path = _persist_completed_task_results(
+            workspace=workspace,
+            task_contexts=task_contexts,
+            spec_tasks=spec.tasks,
+            crew=crew,
+            task_statuses=task_statuses,
+        )
 
         summary_markdown = _build_run_summary(
             crew_id=crew_id,
@@ -247,12 +305,18 @@ def run_crew(
             requested_at=requested_at_value,
             started_at=started_at_value,
             finished_at=datetime.now(UTC).isoformat(),
+            task_statuses=_read_current_task_statuses(workspace, run, task_statuses),
+        )
+        _emit_progress_log(
+            progress_callback,
+            f"[run] completed crew={crew_id} run_id={run.run_id} summary={summary_path}",
         )
         return summary_path
     except Exception as error:
         failure_summary_path: Path | None = None
         persistence_error: WorkspaceError | None = None
         try:
+            crewai_event_bus.flush()
             failure_summary_path = _persist_run_failure(
                 workspace=workspace,
                 run=run,
@@ -262,6 +326,7 @@ def run_crew(
                 crew_id=crew_id,
                 user_request=user_request,
                 error=error,
+                task_statuses=task_statuses,
             )
         except WorkspaceError as workspace_error:
             persistence_error = workspace_error
@@ -278,6 +343,12 @@ def run_crew(
             failure_file=str(run.run_dir / "failure.json"),
             error_type=type(error).__name__,
             error_message=str(error),
+            task_statuses=_read_current_task_statuses(workspace, run, task_statuses),
+        )
+        _emit_progress_log(
+            progress_callback,
+            f"[run] failed crew={crew_id} run_id={run.run_id} "
+            f"error={type(error).__name__}: {error}",
         )
 
         raise CrewRunExecutionError(
@@ -349,6 +420,7 @@ def _write_run_status(
     failure_file: str | None = None,
     error_type: str | None = None,
     error_message: str | None = None,
+    task_statuses: dict[str, TaskStatusRecord] | None = None,
 ) -> None:
     record = OrderStatusRecord(
         order_id=run.run_id,
@@ -362,6 +434,7 @@ def _write_run_status(
         failure_file=failure_file,
         error_type=error_type,
         error_message=error_message,
+        task_statuses=task_statuses or {},
     )
     write_order_status(workspace, run, record)
 
@@ -394,6 +467,74 @@ def _task_output_to_markdown(task_id: str, output: object | None) -> str:
     return f"# {task_id}\n\n{body}\n"
 
 
+def _emit_progress_log(
+    progress_callback: Callable[[str], None] | None,
+    message: str,
+) -> None:
+    if progress_callback is not None:
+        progress_callback(message)
+
+
+def _build_task_status_record(
+    task_spec: CrewTaskSpec,
+    task_context: TaskContext | None,
+    *,
+    status: str,
+    started_at: str | None = None,
+    finished_at: str | None = None,
+    failure_file: str | None = None,
+    context_task_ids: list[str] | None = None,
+    prompt_chars: int | None = None,
+    llm_started_at: str | None = None,
+    llm_finished_at: str | None = None,
+    llm_elapsed_seconds: float | None = None,
+    knowledge_reset_applied: bool | None = None,
+) -> TaskStatusRecord:
+    output_artifact = (
+        str(task_context.task_dir / task_spec.output_artifact)
+        if task_context is not None and task_spec.output_artifact
+        else None
+    )
+    return TaskStatusRecord(
+        task_id=task_spec.id,
+        agent=task_spec.agent,
+        status=status,  # type: ignore[arg-type]
+        started_at=started_at,
+        finished_at=finished_at,
+        result_file=str(task_context.result_path) if task_context is not None else None,
+        output_artifact=output_artifact,
+        failure_file=failure_file,
+        context_task_ids=list(context_task_ids or task_spec.context_tasks),
+        prompt_chars=prompt_chars,
+        llm_started_at=llm_started_at,
+        llm_finished_at=llm_finished_at,
+        llm_elapsed_seconds=llm_elapsed_seconds,
+        knowledge_reset_applied=knowledge_reset_applied,
+    )
+
+
+def _read_current_task_statuses(
+    workspace: TaskWorkspace,
+    run: RunContext,
+    fallback: dict[str, TaskStatusRecord],
+) -> dict[str, TaskStatusRecord]:
+    try:
+        return read_order_status(workspace.root, run.run_id).task_statuses or fallback
+    except (FileNotFoundError, ValueError):
+        return fallback
+
+
+def _write_output_artifact_if_needed(
+    workspace: TaskWorkspace,
+    task_context: TaskContext,
+    task_spec: CrewTaskSpec,
+) -> Path | None:
+    if task_spec.output_artifact is None or not task_context.result_path.exists():
+        return None
+    content = task_context.result_path.read_text(encoding="utf-8")
+    return workspace.write_task_artifact(task_context, task_spec.output_artifact, content)
+
+
 def _build_run_summary(crew_id: str, user_request: str, result: object) -> str:
     return (
         f"# 실행 요약\n\n"
@@ -413,6 +554,7 @@ def _persist_run_failure(
     crew_id: str,
     user_request: str,
     error: Exception,
+    task_statuses: dict[str, TaskStatusRecord],
 ) -> Path:
     failed_at = datetime.now(UTC).isoformat()
     error_payload = _build_error_payload(error)
@@ -422,12 +564,14 @@ def _persist_run_failure(
         task_contexts=task_contexts,
         spec_tasks=spec_tasks,
         crew=crew,
+        task_statuses=task_statuses,
     )
 
     failed_task_id = _detect_failed_task_id(spec_tasks=spec_tasks, crew=crew)
     failed_task_result_path = _persist_failed_task_artifacts(
         workspace=workspace,
         task_contexts=task_contexts,
+        spec_tasks=spec_tasks,
         failed_task_id=failed_task_id,
         failed_at=failed_at,
         error=error,
@@ -473,21 +617,51 @@ def _persist_completed_task_results(
     task_contexts: dict[str, TaskContext],
     spec_tasks: Sequence[CrewTaskSpec],
     crew: object | None,
-) -> None:
+    task_statuses: dict[str, TaskStatusRecord],
+) -> Path:
     crew_tasks = getattr(crew, "tasks", None)
+    last_result_path = next(iter(task_contexts.values())).result_path if task_contexts else None
     if not crew_tasks:
-        return
+        return last_result_path or Path()
 
     for crew_task, task_spec in zip(crew_tasks, spec_tasks, strict=False):
         task_output = getattr(crew_task, "output", None)
         if task_output is None:
             break
         task_id = task_spec.id
-        workspace.write_task_result(
-            task_contexts[task_id],
+        task_context = task_contexts[task_id]
+        last_result_path = workspace.write_task_result(
+            task_context,
             result_markdown=_task_output_to_markdown(task_id, task_output),
             metadata={"status": "completed"},
         )
+        _write_output_artifact_if_needed(workspace, task_context, task_spec)
+        task_failure_path = task_context.task_dir / "failure.json"
+        existing_task_status = _read_existing_task_status(
+            task_context,
+            fallback=task_statuses.get(task_id),
+        )
+        task_status = replace(
+            existing_task_status,
+            status="done",
+            started_at=(
+                getattr(crew_task, "start_time", None).isoformat()
+                if getattr(crew_task, "start_time", None) is not None
+                else existing_task_status.started_at
+            ),
+            finished_at=getattr(crew_task, "end_time", None).isoformat()
+            if getattr(crew_task, "end_time", None) is not None
+            else existing_task_status.finished_at,
+            result_file=str(task_context.result_path),
+            output_artifact=(
+                str(task_context.task_dir / task_spec.output_artifact)
+                if task_spec.output_artifact
+                else existing_task_status.output_artifact
+            ),
+            failure_file=str(task_failure_path) if task_failure_path.exists() else None,
+        )
+        workspace.write_task_status(task_context, task_status.to_dict())
+    return last_result_path or Path()
 
 
 def _detect_failed_task_id(spec_tasks: Sequence[CrewTaskSpec], crew: object | None) -> str | None:
@@ -507,6 +681,7 @@ def _detect_failed_task_id(spec_tasks: Sequence[CrewTaskSpec], crew: object | No
 def _persist_failed_task_artifacts(
     workspace: TaskWorkspace,
     task_contexts: dict[str, TaskContext],
+    spec_tasks: Sequence[CrewTaskSpec],
     failed_task_id: str | None,
     failed_at: str,
     error: Exception,
@@ -526,7 +701,7 @@ def _persist_failed_task_artifacts(
             **dict(error_payload),
         },
     )
-    return workspace.write_task_result(
+    result_path = workspace.write_task_result(
         task_context,
         result_markdown=_build_task_failure_markdown(
             task_id=failed_task_id,
@@ -543,6 +718,43 @@ def _persist_failed_task_artifacts(
             "failure_artifact_path": str(task_failure_json_path),
         },
     )
+    task_spec = next(task for task in spec_tasks if task.id == failed_task_id)
+    existing_status = _read_existing_task_status(
+        task_context,
+        fallback=_build_task_status_record(task_spec, task_context, status="pending"),
+    )
+    task_status = replace(
+        existing_status,
+        status="failed",
+        started_at=existing_status.started_at,
+        finished_at=failed_at,
+        result_file=str(task_context.result_path),
+        output_artifact=(
+            str(task_context.task_dir / task_spec.output_artifact)
+            if task_spec.output_artifact
+            else existing_status.output_artifact
+        ),
+        failure_file=str(task_failure_json_path),
+    )
+    workspace.write_task_status(task_context, task_status.to_dict())
+    return result_path
+
+
+def _read_existing_task_status(
+    task_context: TaskContext,
+    fallback: TaskStatusRecord | None,
+) -> TaskStatusRecord:
+    try:
+        payload = json.loads(task_context.status_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        if fallback is None:
+            raise
+        return fallback
+    if isinstance(payload, dict):
+        return TaskStatusRecord.from_dict(payload)
+    if fallback is None:
+        raise ValueError(f"Invalid task status payload for {task_context.task_id}")
+    return fallback
 
 
 def _build_error_payload(error: Exception) -> dict[str, object]:

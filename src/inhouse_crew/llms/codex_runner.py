@@ -3,8 +3,10 @@ from __future__ import annotations
 import shutil
 import subprocess
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from time import perf_counter
 
 
 @dataclass(slots=True, frozen=True)
@@ -17,6 +19,10 @@ class CodexFailureDetails:
     stderr: str = ""
     output_text: str = ""
     timeout_seconds: int | None = None
+    prompt_chars: int | None = None
+    llm_started_at: str | None = None
+    llm_finished_at: str | None = None
+    llm_elapsed_seconds: float | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload: dict[str, object] = {
@@ -28,6 +34,10 @@ class CodexFailureDetails:
             "stderr": self.stderr,
             "output_text": self.output_text,
             "timeout_seconds": self.timeout_seconds,
+            "prompt_chars": self.prompt_chars,
+            "llm_started_at": self.llm_started_at,
+            "llm_finished_at": self.llm_finished_at,
+            "llm_elapsed_seconds": self.llm_elapsed_seconds,
         }
         return {key: value for key, value in payload.items() if value not in (None, "", [])}
 
@@ -51,6 +61,10 @@ class CodexRunResult:
     stderr: str
     returncode: int
     command: list[str]
+    prompt_chars: int
+    llm_started_at: str
+    llm_finished_at: str
+    llm_elapsed_seconds: float
 
 
 class CodexRunner:
@@ -100,6 +114,9 @@ class CodexRunner:
                 executable=executable or self.codex_command,
             )
             cwd_text = str(cwd) if cwd is not None else None
+            prompt_chars = len(prompt)
+            llm_started_at = datetime.now(UTC).isoformat()
+            llm_started_at_perf = perf_counter()
 
             try:
                 completed = subprocess.run(
@@ -111,6 +128,8 @@ class CodexRunner:
                     check=False,
                 )
             except subprocess.TimeoutExpired as error:
+                llm_finished_at = datetime.now(UTC).isoformat()
+                llm_elapsed_seconds = round(perf_counter() - llm_started_at_perf, 3)
                 raise CodexTimeoutError(
                     f"Codex CLI timed out after {self.timeout_seconds} seconds",
                     details=CodexFailureDetails(
@@ -118,19 +137,31 @@ class CodexRunner:
                         command=command,
                         cwd=cwd_text,
                         timeout_seconds=self.timeout_seconds,
+                        prompt_chars=prompt_chars,
+                        llm_started_at=llm_started_at,
+                        llm_finished_at=llm_finished_at,
+                        llm_elapsed_seconds=llm_elapsed_seconds,
                     ),
                 ) from error
             except OSError as error:
+                llm_finished_at = datetime.now(UTC).isoformat()
+                llm_elapsed_seconds = round(perf_counter() - llm_started_at_perf, 3)
                 raise CodexExecutionError(
                     f"Codex CLI failed to start: {error.strerror or str(error)}",
                     details=CodexFailureDetails(
                         reason="command_start_failed",
                         command=command,
                         cwd=cwd_text,
+                        prompt_chars=prompt_chars,
+                        llm_started_at=llm_started_at,
+                        llm_finished_at=llm_finished_at,
+                        llm_elapsed_seconds=llm_elapsed_seconds,
                     ),
                 ) from error
 
             # Codex exec는 마지막 응답 파일을 가장 안정적으로 남기므로 stdout보다 우선한다.
+            llm_finished_at = datetime.now(UTC).isoformat()
+            llm_elapsed_seconds = round(perf_counter() - llm_started_at_perf, 3)
             output_text = (
                 output_path.read_text(encoding="utf-8").strip() if output_path.exists() else ""
             )
@@ -150,6 +181,10 @@ class CodexRunner:
                         stdout=completed.stdout.strip(),
                         stderr=completed.stderr.strip(),
                         output_text=output_text,
+                        prompt_chars=prompt_chars,
+                        llm_started_at=llm_started_at,
+                        llm_finished_at=llm_finished_at,
+                        llm_elapsed_seconds=llm_elapsed_seconds,
                     ),
                 )
 
@@ -163,6 +198,10 @@ class CodexRunner:
                         returncode=completed.returncode,
                         stdout=completed.stdout.strip(),
                         stderr=completed.stderr.strip(),
+                        prompt_chars=prompt_chars,
+                        llm_started_at=llm_started_at,
+                        llm_finished_at=llm_finished_at,
+                        llm_elapsed_seconds=llm_elapsed_seconds,
                     ),
                 )
 
@@ -172,6 +211,10 @@ class CodexRunner:
                 stderr=completed.stderr,
                 returncode=completed.returncode,
                 command=command,
+                prompt_chars=prompt_chars,
+                llm_started_at=llm_started_at,
+                llm_finished_at=llm_finished_at,
+                llm_elapsed_seconds=llm_elapsed_seconds,
             )
 
     def _ensure_command_available(self, cwd: Path | None) -> str:

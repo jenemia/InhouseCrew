@@ -35,6 +35,11 @@ def test_post_orders_creates_order_workspace_and_status(tmp_path: Path) -> None:
     assert (run_dir / "status.json").exists()
     assert (run_dir / "request.md").exists()
 
+    status_response = client.get(payload["status_url"])
+    status_payload = status_response.json()
+    assert status_response.status_code == 200
+    assert status_payload["task_statuses"]["summarize_request"]["status"] == "pending"
+
 
 def test_pickup_returns_markdown_when_order_is_completed(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[1]

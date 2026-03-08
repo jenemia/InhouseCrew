@@ -59,6 +59,9 @@ uv run inhouse-crew api --host 127.0.0.1 --port 8000
 uv run inhouse-crew worker
 ```
 
+worker는 stdout에 queue claim, run 시작/완료/실패, task `running` / `done` / `failed`
+상태를 순서대로 출력한다.
+
 한 건만 처리:
 
 ```bash
@@ -96,6 +99,10 @@ curl http://127.0.0.1:8000/orders/<order_id>/status
 ```
 
 `status.json` 기준으로 `queued`, `running`, `completed`, `failed` 상태를 확인할 수 있다.
+추가로 `task_statuses` 와 각 task 폴더의 `status.json` 에서
+`pending`, `running`, `done`, `failed` 를 볼 수 있다.
+또한 각 task status에는 `context_task_ids`, `prompt_chars`, `llm_started_at`,
+`llm_finished_at`, `llm_elapsed_seconds`, `knowledge_reset_applied` 가 기록된다.
 
 ### 5) 결과 수령 시나리오 A: 파일 직접 접근
 
@@ -129,6 +136,19 @@ curl http://127.0.0.1:8000/pickup/<order_id>
 - `configs/agents/*.yaml`: agent persona 정의
 - `configs/crews/*.yaml`: crew/task 흐름 정의
 - `configs/settings.yaml`: Codex/workspace 기본 설정
+- `knowledge/<crew_id>/*.md`: crew-level Knowledge 문서
+
+## Crew Knowledge and Memory
+
+- 생성 LLM은 계속 로컬 Codex를 사용한다.
+- crew는 필요할 때만 `knowledge_files`, `memory` 를 opt-in 한다.
+- 기본 임베더는 Ollama (`qwen3-embedding:4b`) 이고, storage는 `workspace/crewai_storage` 아래에 둔다.
+- knowledge/memory를 실제 실행하려면 로컬 Ollama 서버와 `qwen3-embedding:4b` 모델이 준비되어 있어야 한다.
+- 예: `ollama serve` 실행 후 `ollama pull qwen3-embedding:4b`
+- `game_design_team` 은 현재 `knowledge/game_design_team/project_brief.md` 만 사용한다.
+- `game_design_team` memory는 로컬 Codex와 CrewAI memory analysis schema 불일치 경고 때문에 운영상 비활성화했다.
+- knowledge source 내용이 바뀌면 다음 실행에서 crew knowledge 컬렉션을 자동 reset해 stale chunk를 제거한다.
+- reset 여부는 각 task의 `knowledge_reset_applied` 필드에서 확인할 수 있다.
 
 ## Agent Persona Example
 

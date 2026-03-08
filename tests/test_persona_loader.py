@@ -31,6 +31,15 @@ def test_load_registry_reads_sample_configs() -> None:
     }
     assert crews["feature_delivery"].tasks[0].agent == "planner"
     assert crews["game_design_team"].tasks[0].agent == "game_concept_generator"
+    assert crews["game_design_team"].knowledge_files == [
+        "knowledge/game_design_team/project_brief.md"
+    ]
+    assert crews["game_design_team"].memory is False
+    assert crews["game_design_team"].tasks[1].context_tasks == ["generate_game_concept"]
+    assert crews["game_design_team"].tasks[2].context_tasks == [
+        "generate_game_concept",
+        "define_player_fantasy",
+    ]
 
 
 def test_load_agent_persona_rejects_missing_id(tmp_path: Path) -> None:

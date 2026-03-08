@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .crew_factory import CrewFactory
@@ -32,6 +33,10 @@ def run_worker_loop(
     )
     workspace = TaskWorkspace((project_root / factory.settings.workspace_root).resolve())
     workspace.root.mkdir(parents=True, exist_ok=True)
+    _emit_worker_log(
+        "started "
+        f"workspace={workspace.root} poll_interval={poll_interval}s once={str(once).lower()}"
+    )
 
     while True:
         processed = run_worker_once(
@@ -59,21 +64,30 @@ def run_worker_once(
 
         try:
             user_request = read_request_markdown(run)
+            _emit_worker_log(f"picked order_id={order_id} crew={run.crew_id}")
             run_crew(
                 factory=factory,
                 crew_id=run.crew_id,
                 user_request=user_request,
                 project_root=project_root,
                 run_id=order_id,
+                progress_callback=_emit_worker_log,
             )
         except CrewRunExecutionError:
+            _emit_worker_log(f"failed order_id={order_id} crew={run.crew_id}")
             return order_id
         finally:
             release_claim(claim_path)
 
+        _emit_worker_log(f"completed order_id={order_id} crew={run.crew_id}")
         return order_id
 
     return None
+
+
+def _emit_worker_log(message: str) -> None:
+    timestamp = datetime.now(UTC).isoformat()
+    print(f"[worker] {timestamp} {message}", flush=True)
 
 
 __all__ = ["run_worker_loop", "run_worker_once"]

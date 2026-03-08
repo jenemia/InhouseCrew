@@ -7,7 +7,12 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict
 
 from .crew_factory import CrewFactory
-from .orders import OrderStatusRecord, create_order, read_order_status
+from .orders import (
+    OrderStatusRecord,
+    build_pending_task_statuses,
+    create_order,
+    read_order_status,
+)
 from .task_workspace import TaskWorkspace
 
 
@@ -42,11 +47,13 @@ def create_app(
     def create_order_endpoint(payload: CreateOrderRequest) -> dict[str, object]:
         if payload.crew_id not in app.state.factory.crews:
             raise HTTPException(status_code=404, detail="Unknown crew_id")
+        spec = app.state.factory.crews[payload.crew_id]
 
         run, status_record = create_order(
             workspace=app.state.workspace,
             crew_id=payload.crew_id,
             user_request=payload.user_request,
+            task_statuses=build_pending_task_statuses(spec.tasks),
         )
         return _build_order_response(
             order_id=status_record.order_id,

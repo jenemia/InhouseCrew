@@ -1,6 +1,12 @@
 workspace_root: workspace/runs
+crewai_storage_root: workspace/crewai_storage
 default_llm: codex-local-oauth
 codex_command: codex
 codex_model: null
-timeout_seconds: 120
+timeout_seconds: 600
 retry_count: 1
+embedder:
+  provider: ollama
+  config:
+    url: http://localhost:11434/api/embeddings
+    model_name: qwen3-embedding:4b

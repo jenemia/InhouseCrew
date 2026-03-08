@@ -30,6 +30,7 @@ class CrewTaskSpec(BaseModel):
     description: str
     expected_output: str
     output_artifact: str | None = None
+    context_tasks: list[str] = Field(default_factory=list)
 
 
 class CrewOutputPolicy(BaseModel):
@@ -47,6 +48,8 @@ class CrewSpec(BaseModel):
     process: Literal["sequential", "hierarchical"] = "sequential"
     agents: list[str]
     tasks: list[CrewTaskSpec]
+    knowledge_files: list[str] = Field(default_factory=list)
+    memory: bool = False
     output_policy: CrewOutputPolicy = Field(default_factory=CrewOutputPolicy)
 
 

@@ -6,8 +6,18 @@ from typing import Any
 
 import yaml
 from dotenv import dotenv_values
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_embedder() -> dict[str, Any]:
+    return {
+        "provider": "ollama",
+        "config": {
+            "url": "http://localhost:11434/api/embeddings",
+            "model_name": "qwen3-embedding:4b",
+        },
+    }
 
 
 class AppSettings(BaseSettings):
@@ -25,6 +35,8 @@ class AppSettings(BaseSettings):
     codex_model: str | None = None
     timeout_seconds: int = 120
     retry_count: int = 1
+    embedder: dict[str, Any] | None = Field(default_factory=_default_embedder)
+    crewai_storage_root: Path = Path("workspace/crewai_storage")
 
 
 class SettingsFile(BaseModel):
@@ -36,6 +48,8 @@ class SettingsFile(BaseModel):
     codex_model: str | None = None
     timeout_seconds: int = 120
     retry_count: int = 1
+    embedder: dict[str, Any] | None = Field(default_factory=_default_embedder)
+    crewai_storage_root: Path = Path("workspace/crewai_storage")
 
 
 def _load_yaml_dict(path: Path) -> dict[str, Any]:
@@ -53,11 +67,22 @@ def _load_env_overrides(env_file: Path | None) -> dict[str, Any]:
     for field_name in SettingsFile.model_fields:
         env_name = f"INHOUSE_CREW_{field_name.upper()}"
         if env_name in env_data and env_data[env_name] is not None:
-            overrides[field_name] = env_data[env_name]
+            overrides[field_name] = _parse_env_override(field_name, env_data[env_name])
         if env_name in os.environ:
-            overrides[field_name] = os.environ[env_name]
+            overrides[field_name] = _parse_env_override(field_name, os.environ[env_name])
 
     return overrides
+
+
+def _parse_env_override(field_name: str, raw_value: Any) -> Any:
+    if field_name == "embedder" and isinstance(raw_value, str):
+        parsed = yaml.safe_load(raw_value)
+        if parsed is None:
+            return None
+        if not isinstance(parsed, dict):
+            raise ValueError("INHOUSE_CREW_EMBEDDER must be a JSON/YAML object or null")
+        return parsed
+    return raw_value
 
 
 def load_settings(settings_path: Path, env_file: Path | None = None) -> AppSettings:

@@ -28,6 +28,7 @@ class TaskContext:
     input_path: Path
     result_path: Path
     metadata_path: Path
+    status_path: Path
 
 
 class TaskWorkspace:
@@ -78,24 +79,41 @@ class TaskWorkspace:
         task_id: str,
         input_markdown: str,
         metadata: dict[str, object] | None = None,
+        status_payload: dict[str, object] | None = None,
     ) -> TaskContext:
         task_dir = run.run_dir / task_id
         input_path = task_dir / "input.md"
         result_path = task_dir / "result.md"
         metadata_path = task_dir / "metadata.json"
+        status_path = task_dir / "status.json"
+        metadata_payload = {
+            "task_id": task_id,
+            "run_id": run.run_id,
+            **(metadata or {}),
+        }
+        resolved_status_payload = status_payload or {
+            "task_id": task_id,
+            "agent": str(metadata_payload.get("agent") or ""),
+            "status": "pending",
+            "started_at": None,
+            "finished_at": None,
+            "result_file": str(result_path),
+            "output_artifact": metadata_payload.get("output_artifact"),
+            "failure_file": None,
+            "context_task_ids": [],
+            "prompt_chars": None,
+            "llm_started_at": None,
+            "llm_finished_at": None,
+            "llm_elapsed_seconds": None,
+            "knowledge_reset_applied": None,
+        }
 
         try:
             # 각 task는 입력/결과/메타데이터를 같은 폴더에 저장해 추적 가능성을 높인다.
             task_dir.mkdir(parents=True, exist_ok=False)
             input_path.write_text(input_markdown, encoding="utf-8")
-            self._write_json(
-                metadata_path,
-                {
-                    "task_id": task_id,
-                    "run_id": run.run_id,
-                    **(metadata or {}),
-                },
-            )
+            self._write_json(metadata_path, metadata_payload)
+            self._write_json(status_path, resolved_status_payload)
         except OSError as error:
             raise WorkspaceError(f"Failed to create task workspace for {task_id}") from error
 
@@ -105,6 +123,7 @@ class TaskWorkspace:
             input_path=input_path,
             result_path=result_path,
             metadata_path=metadata_path,
+            status_path=status_path,
         )
 
     def write_task_result(
@@ -166,6 +185,13 @@ class TaskWorkspace:
                 f"Failed to write task artifact '{artifact_name}' for {task.task_id}"
             ) from error
         return artifact_path
+
+    def write_task_status(self, task: TaskContext, payload: dict[str, object]) -> Path:
+        try:
+            self._write_json(task.status_path, payload)
+        except OSError as error:
+            raise WorkspaceError(f"Failed to write task status for {task.task_id}") from error
+        return task.status_path
 
     def write_run_artifact(self, run: RunContext, artifact_name: str, content: str) -> Path:
         artifact_path = run.run_dir / artifact_name

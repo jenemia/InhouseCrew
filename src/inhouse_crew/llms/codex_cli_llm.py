@@ -7,7 +7,7 @@ from typing import Any
 from crewai import BaseLLM
 from pydantic import BaseModel
 
-from .codex_runner import CodexRunner
+from .codex_runner import CodexExecutionError, CodexRunner
 
 
 class CodexCliLLM(BaseLLM):
@@ -53,7 +53,26 @@ class CodexCliLLM(BaseLLM):
             available_functions=available_functions,
             response_model=response_model,
         )
-        result = self.runner.run(prompt)
+        prompt_chars = len(prompt)
+        try:
+            result = self.runner.run(prompt)
+        except CodexExecutionError as error:
+            self._attach_task_telemetry(
+                from_task,
+                prompt_chars=prompt_chars,
+                llm_started_at=error.details.llm_started_at,
+                llm_finished_at=error.details.llm_finished_at,
+                llm_elapsed_seconds=error.details.llm_elapsed_seconds,
+            )
+            raise
+
+        self._attach_task_telemetry(
+            from_task,
+            prompt_chars=result.prompt_chars,
+            llm_started_at=result.llm_started_at,
+            llm_finished_at=result.llm_finished_at,
+            llm_elapsed_seconds=result.llm_elapsed_seconds,
+        )
 
         response_text = result.output_text
         if self.stop:
@@ -143,3 +162,21 @@ class CodexCliLLM(BaseLLM):
 
         sections.append("\n\n".join(transcript))
         return "\n\n".join(section for section in sections if section.strip())
+
+    def _attach_task_telemetry(
+        self,
+        task: Any | None,
+        *,
+        prompt_chars: int | None,
+        llm_started_at: str | None,
+        llm_finished_at: str | None,
+        llm_elapsed_seconds: float | None,
+    ) -> None:
+        if task is None:
+            return
+        task._inhouse_llm_telemetry = {
+            "prompt_chars": prompt_chars,
+            "llm_started_at": llm_started_at,
+            "llm_finished_at": llm_finished_at,
+            "llm_elapsed_seconds": llm_elapsed_seconds,
+        }

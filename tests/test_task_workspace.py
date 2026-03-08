@@ -47,6 +47,10 @@ def test_task_workspace_creates_run_and_task_artifacts(tmp_path: Path) -> None:
 
     assert run.run_dir == tmp_path / "runs" / "run-001"
     assert task.input_path.read_text(encoding="utf-8") == "# Input\n"
+    task_status = json.loads(task.status_path.read_text(encoding="utf-8"))
+    assert task_status["status"] == "pending"
+    assert task_status["context_task_ids"] == []
+    assert task_status["knowledge_reset_applied"] is None
     assert result_path.read_text(encoding="utf-8") == "# Result\n"
     assert task_artifact_path.read_text(encoding="utf-8") == "# Failure\n"
     assert json.loads(task_json_path.read_text(encoding="utf-8"))["status"] == "failed"
