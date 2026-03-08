@@ -24,6 +24,21 @@ def test_crew_factory_creates_feature_delivery_crew() -> None:
     assert crew.tasks[0].name == "plan_feature"
 
 
+def test_crew_factory_creates_game_design_team_crew() -> None:
+    factory = CrewFactory.from_paths(
+        config_root=Path("configs"),
+        settings_path=Path("configs/settings.yaml"),
+        project_root=Path.cwd(),
+    )
+
+    crew = factory.create_crew("game_design_team")
+
+    assert len(crew.agents) == 5
+    assert len(crew.tasks) == 5
+    assert crew.tasks[0].name == "generate_game_concept"
+    assert crew.tasks[-1].name == "synthesize_game_direction"
+
+
 def test_crew_factory_raises_on_unknown_tool_reference() -> None:
     personas, crews = load_registry(Path("configs"))
     settings = load_settings(Path("configs/settings.yaml"))

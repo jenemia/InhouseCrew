@@ -11,15 +11,26 @@ from inhouse_crew.persona_loader import load_agent_persona, load_crew_spec, load
 def test_load_registry_reads_sample_configs() -> None:
     agents, crews = load_registry(Path("configs"))
 
-    assert set(agents) == {"developer", "planner", "reviewer"}
+    assert set(agents) == {
+        "developer",
+        "game_concept_generator",
+        "game_design_director",
+        "game_fantasy_designer",
+        "game_innovation_designer",
+        "game_market_validator",
+        "planner",
+        "reviewer",
+    }
     assert set(crews) == {
         "coding_session",
         "feature_delivery",
+        "game_design_team",
         "product_discovery",
         "quickstart",
         "review_session",
     }
     assert crews["feature_delivery"].tasks[0].agent == "planner"
+    assert crews["game_design_team"].tasks[0].agent == "game_concept_generator"
 
 
 def test_load_agent_persona_rejects_missing_id(tmp_path: Path) -> None:

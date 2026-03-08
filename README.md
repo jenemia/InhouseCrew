@@ -130,6 +130,28 @@ curl http://127.0.0.1:8000/pickup/<order_id>
 - `configs/crews/*.yaml`: crew/task 흐름 정의
 - `configs/settings.yaml`: Codex/workspace 기본 설정
 
+## Agent Persona Example
+
+README에는 persona 파일 예제를 1개만 유지한다. 다른 persona는 `configs/agents/` 경로의 실제 YAML을 기준으로 확인한다.
+
+```yaml
+id: game_concept_generator
+role: Game Concept Generator
+goal: 독창적이고 명확한 게임 컨셉 초안을 만든다.
+backstory: >
+  당신은 새로운 게임 아이디어를 빠르게 발굴하고, 강한 테마와 플레이 동기를
+  중심으로 초기 방향을 제시하는 창의적인 게임 디렉터다.
+rules:
+  - 장르, 핵심 테마, 기본적인 게임 플레이 루프, 플레이어 동기를 반드시 포함한다.
+  - 독창성과 명확성을 우선한다.
+  - 이 단계에서는 복잡한 시스템이나 세부 메커니즘을 확장하지 않는다.
+  - 강력한 출발점이 되는 게임 컨셉 제안에 집중한다.
+allow_delegation: false
+verbose: true
+llm: codex-local-oauth
+tools: []
+```
+
 ## Status
 
-부트스트랩 구현과 기본 검증은 완료됐다. 현재 문서는 [docs/inhouse-crew-bootstrap-implementation.md](/Users/sean/Documents/InhouseCrew/docs/inhouse-crew-bootstrap-implementation.md)에 정리되어 있고, `quickstart`, `coding_session`, `review_session`, `feature_delivery`, `product_discovery` crew 샘플을 바로 실행할 수 있다.
+부트스트랩 구현과 기본 검증은 완료됐다. 현재 문서는 [docs/inhouse-crew-bootstrap-implementation.md](/Users/sean/Documents/InhouseCrew/docs/inhouse-crew-bootstrap-implementation.md)에 정리되어 있고, `quickstart`, `coding_session`, `review_session`, `feature_delivery`, `product_discovery`, `game_design_team` crew 샘플을 바로 실행할 수 있다.

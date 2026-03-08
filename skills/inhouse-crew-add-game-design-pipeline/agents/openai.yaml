@@ -1,0 +1,4 @@
+interface:
+  display_name: "Inhouse Game Design Pipeline"
+  short_description: "Add or update InhouseCrew game design pipeline crews"
+  default_prompt: "Use $inhouse-crew-add-game-design-pipeline to add or update an InhouseCrew game design pipeline crew."

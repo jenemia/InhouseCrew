@@ -1,0 +1,4 @@
+interface:
+  display_name: "Inhouse Persona Agent"
+  short_description: "Add or update InhouseCrew agent personas consistently"
+  default_prompt: "Use $inhouse-crew-add-agent-persona to add or update an InhouseCrew agent persona."
