@@ -1,0 +1,65 @@
+{
+  "crew_id": "game_design_team",
+  "error_message": null,
+  "error_type": null,
+  "failure_file": null,
+  "finished_at": "2026-03-08T10:26:45.583128+00:00",
+  "order_id": "T20260308-000004_\uc7a5\ube44-\uc2dc\uc2a4\ud15c\uc744-\uae30\ud68d\ud574\uc918-\uae30\ubcf8-\uc2a4\ud0ef\uacfc-\ub2e4\uc591\ud55c",
+  "requested_at": "2026-03-08T10:13:31.303293+00:00",
+  "started_at": "2026-03-08T10:13:31.717699+00:00",
+  "status": "completed",
+  "summary_file": "/Users/sean/Documents/InhouseCrew/workspace/runs/T20260308-000004_\uc7a5\ube44-\uc2dc\uc2a4\ud15c\uc744-\uae30\ud68d\ud574\uc918-\uae30\ubcf8-\uc2a4\ud0ef\uacfc-\ub2e4\uc591\ud55c/summary.md",
+  "task_statuses": {
+    "define_player_fantasy": {
+      "agent": "game_fantasy_designer",
+      "failure_file": null,
+      "finished_at": "2026-03-08T10:17:26.087320+00:00",
+      "output_artifact": "/Users/sean/Documents/InhouseCrew/workspace/runs/T20260308-000004_\uc7a5\ube44-\uc2dc\uc2a4\ud15c\uc744-\uae30\ud68d\ud574\uc918-\uae30\ubcf8-\uc2a4\ud0ef\uacfc-\ub2e4\uc591\ud55c/define_player_fantasy/fantasy.md",
+      "result_file": "/Users/sean/Documents/InhouseCrew/workspace/runs/T20260308-000004_\uc7a5\ube44-\uc2dc\uc2a4\ud15c\uc744-\uae30\ud68d\ud574\uc918-\uae30\ubcf8-\uc2a4\ud0ef\uacfc-\ub2e4\uc591\ud55c/define_player_fantasy/result.md",
+      "started_at": "2026-03-08T10:15:51.009834+00:00",
+      "status": "done",
+      "task_id": "define_player_fantasy"
+    },
+    "design_unique_hook": {
+      "agent": "game_innovation_designer",
+      "failure_file": null,
+      "finished_at": "2026-03-08T10:20:32.158847+00:00",
+      "output_artifact": "/Users/sean/Documents/InhouseCrew/workspace/runs/T20260308-000004_\uc7a5\ube44-\uc2dc\uc2a4\ud15c\uc744-\uae30\ud68d\ud574\uc918-\uae30\ubcf8-\uc2a4\ud0ef\uacfc-\ub2e4\uc591\ud55c/design_unique_hook/innovation.md",
+      "result_file": "/Users/sean/Documents/InhouseCrew/workspace/runs/T20260308-000004_\uc7a5\ube44-\uc2dc\uc2a4\ud15c\uc744-\uae30\ud68d\ud574\uc918-\uae30\ubcf8-\uc2a4\ud0ef\uacfc-\ub2e4\uc591\ud55c/design_unique_hook/result.md",
+      "started_at": "2026-03-08T10:17:26.089441+00:00",
+      "status": "done",
+      "task_id": "design_unique_hook"
+    },
+    "generate_game_concept": {
+      "agent": "game_concept_generator",
+      "failure_file": null,
+      "finished_at": "2026-03-08T10:15:51.007401+00:00",
+      "output_artifact": "/Users/sean/Documents/InhouseCrew/workspace/runs/T20260308-000004_\uc7a5\ube44-\uc2dc\uc2a4\ud15c\uc744-\uae30\ud68d\ud574\uc918-\uae30\ubcf8-\uc2a4\ud0ef\uacfc-\ub2e4\uc591\ud55c/generate_game_concept/concept.md",
+      "result_file": "/Users/sean/Documents/InhouseCrew/workspace/runs/T20260308-000004_\uc7a5\ube44-\uc2dc\uc2a4\ud15c\uc744-\uae30\ud68d\ud574\uc918-\uae30\ubcf8-\uc2a4\ud0ef\uacfc-\ub2e4\uc591\ud55c/generate_game_concept/result.md",
+      "started_at": "2026-03-08T10:13:35.123803+00:00",
+      "status": "done",
+      "task_id": "generate_game_concept"
+    },
+    "synthesize_game_direction": {
+      "agent": "game_design_director",
+      "failure_file": null,
+      "finished_at": "2026-03-08T10:26:45.569901+00:00",
+      "output_artifact": "/Users/sean/Documents/InhouseCrew/workspace/runs/T20260308-000004_\uc7a5\ube44-\uc2dc\uc2a4\ud15c\uc744-\uae30\ud68d\ud574\uc918-\uae30\ubcf8-\uc2a4\ud0ef\uacfc-\ub2e4\uc591\ud55c/synthesize_game_direction/game_design_direction.md",
+      "result_file": "/Users/sean/Documents/InhouseCrew/workspace/runs/T20260308-000004_\uc7a5\ube44-\uc2dc\uc2a4\ud15c\uc744-\uae30\ud68d\ud574\uc918-\uae30\ubcf8-\uc2a4\ud0ef\uacfc-\ub2e4\uc591\ud55c/synthesize_game_direction/result.md",
+      "started_at": "2026-03-08T10:24:17.546309+00:00",
+      "status": "done",
+      "task_id": "synthesize_game_direction"
+    },
+    "validate_market_fit": {
+      "agent": "game_market_validator",
+      "failure_file": null,
+      "finished_at": "2026-03-08T10:24:17.542931+00:00",
+      "output_artifact": "/Users/sean/Documents/InhouseCrew/workspace/runs/T20260308-000004_\uc7a5\ube44-\uc2dc\uc2a4\ud15c\uc744-\uae30\ud68d\ud574\uc918-\uae30\ubcf8-\uc2a4\ud0ef\uacfc-\ub2e4\uc591\ud55c/validate_market_fit/market_validation.md",
+      "result_file": "/Users/sean/Documents/InhouseCrew/workspace/runs/T20260308-000004_\uc7a5\ube44-\uc2dc\uc2a4\ud15c\uc744-\uae30\ud68d\ud574\uc918-\uae30\ubcf8-\uc2a4\ud0ef\uacfc-\ub2e4\uc591\ud55c/validate_market_fit/result.md",
+      "started_at": "2026-03-08T10:20:32.162447+00:00",
+      "status": "done",
+      "task_id": "validate_market_fit"
+    }
+  },
+  "user_request_preview": "\uc7a5\ube44 \uc2dc\uc2a4\ud15c\uc744 \uae30\ud68d\ud574\uc918. \uae30\ubcf8 \uc2a4\ud0ef\uacfc \ub2e4\uc591\ud55c \uc635\uc158\uc744 \ub123\uc744 \uc218 \uc788\uc5b4\uc57c\ud574. \uadf8\ub9ac\uace0 \uadf8 \uc635\uc158\uc744 \ubcc0\uacbd\ud558\uac70\ub098 \uac15\ud654\ud560 \uc218 \uc788\uc5b4 \uc720\uc800\ub4e4\uc774 \ud30c\ubc0d\uc758 \ubaa9\uc801\uc774 \ub418\ub3c4\ub85d \ud574\uc57c\ud574. \uc7a5\ube44\uc758 \uc218\ub294 \ub9ce\uc9c0 \uc54a\uace0 \uc635\uc158\uc73c\ub85c \ucc28\ubcc4\uc810\uc744 \uc918\uc57c \ud558\ub2c8\uae4c. \uc7a5\u2026"
+}
